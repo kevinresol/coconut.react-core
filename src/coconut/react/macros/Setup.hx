@@ -127,14 +127,13 @@ class Setup {
 
       var self = toComplex(cls);
 
-      var extendTypes = [];
       var attributeFields = ctx.attributes.concat(
         (macro class {
           @:optional var key(default, never):coconut.react.Key;
           @:optional var ref(default, never):coconut.ui.Ref<$self>;
         }).fields
       );
-      var attributes = TExtend(extendTypes, attributeFields);
+      var attributes = TAnonymous(attributeFields);
 
       {
         var render = ctx.target.memberByName('render').sure();
@@ -177,16 +176,21 @@ class Setup {
                 wrapped = macro $wrapper($wrapped);
               case {params: [wrapper, e = macro (_:$ct)]}: // https://github.com/HaxeFoundation/haxe-evolution/pull/44
                 switch ct.toType() {
-                  case Success(_.toComplex() => TAnonymous(fields)):
-                    for(field in fields) attributeFields.push(field);
-                  case Success(t = _.toComplex() => TPath(path)) if(t.reduce().match(TAnonymous(_))):
-                    extendTypes.push(path);
+                  case Success(_.reduce().toComplex() => TAnonymous(fields)):
+                    for(field in fields) {
+                      switch field.kind {
+                        case FVar(ct, e): field.kind = FVar(macro:coconut.data.Value<$ct>, e);
+                        case FProp(get, set, ct, e): field.kind = FProp(get, set, macro:coconut.data.Value<$ct>, e);
+                        case _: // TODO:
+                      }
+                      attributeFields.push(field);
+                    }
                   case _:
                     e.pos.error('Expected anonymous structure type');
                 }
                 wrapped = macro $wrapper($wrapped);
               case {params: [wrapper, _], pos: pos}:
-                pos.error('Second parameter of @:wrap should be a ECheckType expr');
+                pos.error('Second parameter of @:wrap should be a ETypeCheck expr');
               case {pos: pos}:
                 pos.error('@:wrap must have one or two parameters');
             }
@@ -200,6 +204,12 @@ class Setup {
       }
       
       // injected props
+      var init = 
+        switch ctx.target.memberByName('__initAttributes') {
+          case Success({kind: FFun(f)}): f;
+          case _: throw 'unreachable';
+        }
+      
       for(member in ctx.target)
         switch [member.kind, member.meta.filter(function(meta) return meta.name == ':react.injected')] {
           case [_, []]:
@@ -216,10 +226,25 @@ class Setup {
               case _:
                 meta.pos.error('@:react.injected should have at most one parameter');
             }
+            var internal = '__coco_${member.name}';
+            var getter = 'get_${member.name}';
+            
             member.kind = FProp('get', 'never', ct, null);
-            var getter = member.name.getter(macro return (cast props).$name);
-            getter.isBound = true;
-            ctx.target.addMember(getter);
+            ctx.target.addMembers(macro class {
+              @:noCompletion private var $internal:tink.state.Observable<$ct> =
+                new tink.state.State(null);
+              inline function $getter() return $i{internal}.value;
+            });
+            
+            init.expr = init.expr.concat(macro {
+              var value:Dynamic = (cast $i{init.args[0].name}).$name;
+              if(($i{internal}:Dynamic) != value) {
+                if(Std.is(value, tink.state.Observable.ObservableObject))
+                  $i{internal} = value; // TODO: this is so hacky, fix me please
+                else
+                  (cast $i{internal}:tink.state.State<$ct>).set(value);
+              }
+            });
             
           case _:
             member.pos.error('Multiple @:react.injected is not supported');

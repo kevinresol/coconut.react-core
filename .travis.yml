@@ -17,9 +17,9 @@ os:
   # - osx
 
 env:
-  - HAXE_VERSION=3.4.7
+  - HAXE_VERSION=stable
   - HAXE_VERSION=latest
-  # - HAXE_VERSION=nightly
+  - HAXE_VERSION=nightly
   
 install:
   - npm i -g lix
@@ -31,7 +31,7 @@ script:
 
 jobs:
   include:
-    - stage: test # should uncomment this when there is no matrix above (e.g. only one os, one env, etc)
+    # - stage: test # should uncomment this when there is no matrix above (e.g. only one os, one env, etc)
     - stage: deploy
       os: linux
       install:
