@@ -236,15 +236,21 @@ class Setup {
               inline function $getter() return $i{internal}.value;
             });
             
-            init.expr = init.expr.concat(macro {
-              var value:Dynamic = (cast $i{init.args[0].name}).$name;
-              if(($i{internal}:Dynamic) != value) {
-                if(Std.is(value, tink.state.Observable.ObservableObject))
-                  $i{internal} = value; // TODO: this is so hacky, fix me please
-                else
-                  (cast $i{internal}:tink.state.State<$ct>).set(value);
+            init.expr = init.expr.concat(
+              if(Context.defined('coconut.react.may_inject_observables')) {
+                macro {
+                  var value:Dynamic = (cast $i{init.args[0].name}).$name;
+                  if(($i{internal}:Dynamic) != value) {
+                    if(Std.is(value, tink.state.Observable.ObservableObject))
+                      $i{internal} = value; // TODO: this is so hacky, fix me please
+                    else
+                      (cast $i{internal}:tink.state.State<$ct>).set(value);
+                  }
+                }
+              } else {
+                macro (cast $i{internal}:tink.state.State<$ct>).set((cast $i{init.args[0].name}).$name);
               }
-            });
+            );
             
           case _:
             member.pos.error('Multiple @:react.injected is not supported');
